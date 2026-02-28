@@ -39,9 +39,11 @@
                     Você tem {{ pending_received_count }} solicitação(ões) pendente(s). Veja em "Solicitações recebidas".
                 </div>
             {% endif %}
-            <form method="post" action="/posts" class="form">
+            <form method="post" action="/posts" class="form" enctype="multipart/form-data">
                 <label>Nova publicação</label>
                 <textarea name="conteudo" rows="4" placeholder="Compartilhe uma palavra, aviso ou testemunho"></textarea>
+                <label for="post-anexo">Anexar arquivo (opcional)</label>
+                <input id="post-anexo" type="file" name="anexo">
                 <button type="submit">Publicar</button>
             </form>
 
@@ -57,6 +59,13 @@
                             {% endif %}
                             <small>{{ post['igreja'] }} • {{ post['cidade'] }}/{{ post['pais'] }} • {{ post['criado_em'] }}</small>
                             <p>{{ post['conteudo'] }}</p>
+                            {% if post['file_url'] %}
+                                <p>
+                                    <a href="{{ post['file_url'] }}" target="_blank" class="profile-link">
+                                        📎 {{ post['file_name'] or 'Abrir anexo' }}
+                                    </a>
+                                </p>
+                            {% endif %}
 
                             <div class="post-actions">
                                 <form method="post" action="/posts/{{ post['id'] }}/like">

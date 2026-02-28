@@ -9,6 +9,11 @@ from typing import Optional
 from urllib.parse import quote
 
 try:
+    import requests
+except ImportError:
+    requests = None
+
+try:
     import psycopg  # type: ignore[import-not-found]
     from psycopg.rows import dict_row  # type: ignore[import-not-found]
 except ImportError:
@@ -50,6 +55,7 @@ if os.path.isdir(RENDER_PERSISTENT_DIR):
     if UPLOAD_DIR.startswith("/app/data/"):
         UPLOAD_DIR = UPLOAD_DIR.replace("/app/data/", f"{RENDER_PERSISTENT_DIR}/", 1)
 CHAT_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "chat")
+POST_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "posts")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "social-igreja-chave-local")
@@ -60,8 +66,19 @@ if os.path.isdir(RENDER_PERSISTENT_DIR) and BACKUP_DIR.startswith("/app/data/"):
     BACKUP_DIR = BACKUP_DIR.replace("/app/data/", f"{RENDER_PERSISTENT_DIR}/", 1)
 BACKUP_KEEP = int(os.getenv("BACKUP_KEEP", "15"))
 
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip()
+CLOUDINARY_FOLDER = os.getenv("CLOUDINARY_FOLDER", "snt-igreja").strip().strip("/")
+CLOUDINARY_CONFIGURED = bool(CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET)
+CLOUDINARY_ERROR = ""
+if CLOUDINARY_CONFIGURED and requests is None:
+    CLOUDINARY_ERROR = "Cloudinary configurado, mas dependência 'requests' não está instalada."
+USE_CLOUDINARY = bool(CLOUDINARY_CONFIGURED and requests)
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
+os.makedirs(POST_UPLOAD_DIR, exist_ok=True)
 
 
 if USE_POSTGRES:
@@ -213,11 +230,16 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             conteudo TEXT NOT NULL,
+            file_url TEXT,
+            file_name TEXT,
             criado_em TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
         """
     )
+
+    add_column_if_missing(cursor, "posts", "file_url", "TEXT")
+    add_column_if_missing(cursor, "posts", "file_name", "TEXT")
 
     cursor.execute(
         """
@@ -425,12 +447,23 @@ def save_uploaded_photo(photo: UploadFile):
     if extension not in [".jpg", ".jpeg", ".png", ".webp"]:
         return None, "Formato de foto inválido. Use JPG, PNG ou WEBP."
 
-    file_name = f"{uuid.uuid4().hex}{extension}"
-    file_path = os.path.join(UPLOAD_DIR, file_name)
-
     file_bytes = photo.file.read()
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         return None, f"Foto muito grande. Limite de {MAX_UPLOAD_MB}MB."
+
+    if USE_CLOUDINARY:
+        foto_url, upload_error = upload_to_cloudinary(
+            file_bytes,
+            photo.filename,
+            "profiles",
+            resource_type="image",
+        )
+        if upload_error:
+            return None, upload_error
+        return foto_url, None
+
+    file_name = f"{uuid.uuid4().hex}{extension}"
+    file_path = os.path.join(UPLOAD_DIR, file_name)
 
     with open(file_path, "wb") as f:
         f.write(file_bytes)
@@ -445,12 +478,23 @@ def save_gallery_photo(photo: UploadFile):
     if extension not in [".jpg", ".jpeg", ".png", ".webp"]:
         return None, "Formato inválido. Use JPG, PNG ou WEBP."
 
-    file_name = f"gallery_{uuid.uuid4().hex}{extension}"
-    file_path = os.path.join(UPLOAD_DIR, file_name)
-
     file_bytes = photo.file.read()
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         return None, f"Imagem muito grande. Limite de {MAX_UPLOAD_MB}MB."
+
+    if USE_CLOUDINARY:
+        image_url, upload_error = upload_to_cloudinary(
+            file_bytes,
+            photo.filename,
+            "gallery",
+            resource_type="image",
+        )
+        if upload_error:
+            return None, upload_error
+        return image_url, None
+
+    file_name = f"gallery_{uuid.uuid4().hex}{extension}"
+    file_path = os.path.join(UPLOAD_DIR, file_name)
 
     with open(file_path, "wb") as out:
         out.write(file_bytes)
@@ -465,18 +509,62 @@ def save_chat_file(file: UploadFile):
     if not file_name:
         return None, None, "Arquivo inválido."
 
-    extension = os.path.splitext(file_name)[1].lower()
-    safe_name = f"{uuid.uuid4().hex}{extension}"
-    file_path = os.path.join(CHAT_UPLOAD_DIR, safe_name)
-
     file_bytes = file.file.read()
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         return None, None, f"Arquivo muito grande. Limite de {MAX_UPLOAD_MB}MB."
+
+    if USE_CLOUDINARY:
+        file_url, upload_error = upload_to_cloudinary(
+            file_bytes,
+            file_name,
+            "chat",
+            resource_type="auto",
+        )
+        if upload_error:
+            return None, None, upload_error
+        return file_url, file_name, None
+
+    extension = os.path.splitext(file_name)[1].lower()
+    safe_name = f"{uuid.uuid4().hex}{extension}"
+    file_path = os.path.join(CHAT_UPLOAD_DIR, safe_name)
 
     with open(file_path, "wb") as out:
         out.write(file_bytes)
 
     return f"/uploads/chat/{safe_name}", file_name, None
+
+
+def save_post_attachment(file: UploadFile):
+    if not file or not file.filename:
+        return None, None, None
+
+    file_name = file.filename.strip()
+    if not file_name:
+        return None, None, "Arquivo inválido."
+
+    file_bytes = file.file.read()
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        return None, None, f"Arquivo muito grande. Limite de {MAX_UPLOAD_MB}MB."
+
+    if USE_CLOUDINARY:
+        file_url, upload_error = upload_to_cloudinary(
+            file_bytes,
+            file_name,
+            "posts",
+            resource_type="auto",
+        )
+        if upload_error:
+            return None, None, upload_error
+        return file_url, file_name, None
+
+    extension = os.path.splitext(file_name)[1].lower()
+    safe_name = f"post_{uuid.uuid4().hex}{extension}"
+    file_path = os.path.join(POST_UPLOAD_DIR, safe_name)
+
+    with open(file_path, "wb") as out:
+        out.write(file_bytes)
+
+    return f"/uploads/posts/{safe_name}", file_name, None
 
 
 def can_users_chat(cursor, user_a_id: int, user_b_id: int) -> bool:
@@ -487,6 +575,65 @@ def can_users_chat(cursor, user_a_id: int, user_b_id: int) -> bool:
         (user_a_id, user_b_id),
     )
     return cursor.fetchone() is not None
+
+
+def upload_to_cloudinary(file_bytes: bytes, original_filename: str, section: str, resource_type: str = "auto"):
+    if not USE_CLOUDINARY:
+        return None, "Armazenamento externo não configurado para upload."
+
+    sanitized_name = os.path.basename(original_filename or "arquivo")
+    file_stem = os.path.splitext(sanitized_name)[0] or "arquivo"
+    public_id = f"{file_stem}_{uuid.uuid4().hex[:12]}"
+
+    folder_parts = [CLOUDINARY_FOLDER] if CLOUDINARY_FOLDER else []
+    if section:
+        folder_parts.append(section.strip("/"))
+    folder = "/".join(folder_parts)
+
+    timestamp = int(datetime.now().timestamp())
+    params_to_sign = {
+        "folder": folder,
+        "public_id": public_id,
+        "timestamp": timestamp,
+    }
+    to_sign = "&".join(f"{key}={params_to_sign[key]}" for key in sorted(params_to_sign))
+    signature = hashlib.sha1(f"{to_sign}{CLOUDINARY_API_SECRET}".encode("utf-8")).hexdigest()
+
+    endpoint = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/{resource_type}/upload"
+    try:
+        response = requests.post(
+            endpoint,
+            data={
+                "api_key": CLOUDINARY_API_KEY,
+                "timestamp": str(timestamp),
+                "folder": folder,
+                "public_id": public_id,
+                "signature": signature,
+            },
+            files={"file": (sanitized_name, file_bytes)},
+            timeout=45,
+        )
+    except Exception:
+        return None, "Falha ao enviar arquivo para armazenamento externo."
+
+    if response.status_code >= 400:
+        try:
+            payload = response.json()
+            details = payload.get("error", {}).get("message")
+            if details:
+                return None, f"Falha no upload externo: {details}"
+        except Exception:
+            pass
+        return None, "Falha no upload externo."
+
+    try:
+        payload = response.json()
+        secure_url = payload.get("secure_url")
+        if not secure_url:
+            return None, "Upload concluído sem URL de retorno."
+        return secure_url, None
+    except Exception:
+        return None, "Resposta inválida do armazenamento externo."
 
 
 def get_or_create_dm(cursor, user_a_id: int, user_b_id: int) -> int:
@@ -723,6 +870,8 @@ def delete_user_account_data(cursor, target_user_id: int):
 
     cursor.execute("SELECT id FROM posts WHERE user_id = ?", (target_user_id,))
     own_posts = [row["id"] for row in cursor.fetchall()]
+    cursor.execute("SELECT file_url FROM posts WHERE user_id = ?", (target_user_id,))
+    own_post_files = [row["file_url"] for row in cursor.fetchall() if row.get("file_url")]
     for post_id in own_posts:
         cursor.execute("DELETE FROM comments WHERE post_id = ?", (post_id,))
         cursor.execute("DELETE FROM post_likes WHERE post_id = ?", (post_id,))
@@ -749,6 +898,7 @@ def delete_user_account_data(cursor, target_user_id: int):
         file_urls.append(profile_photo_url)
     for post in photo_posts:
         file_urls.append(post["image_url"])
+    file_urls.extend(own_post_files)
     return file_urls
 
 
@@ -826,6 +976,9 @@ def healthcheck():
             "database_url_valid": bool(DATABASE_URL),
             "database_url_error": DATABASE_URL_ERROR,
             "postgres_driver_available": bool(psycopg),
+            "cloudinary_enabled": USE_CLOUDINARY,
+            "cloudinary_configured": CLOUDINARY_CONFIGURED,
+            "cloudinary_error": CLOUDINARY_ERROR,
         }
     except DBError:
         return {"status": "degraded", "db": "error"}
@@ -1037,7 +1190,7 @@ def feed(request: Request):
 
     cursor.execute(
         """
-        SELECT p.id, p.user_id, p.conteudo, p.criado_em, u.nome, u.igreja, u.cidade, u.pais, u.foto_url,
+        SELECT p.id, p.user_id, p.conteudo, p.file_url, p.file_name, p.criado_em, u.nome, u.igreja, u.cidade, u.pais, u.foto_url,
                (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id) AS likes_count,
                EXISTS(
                    SELECT 1 FROM post_likes mpl
@@ -1227,20 +1380,29 @@ def feed(request: Request):
 
 
 @app.post("/posts")
-def create_post(request: Request, conteudo: str = Form(...)):
+async def create_post(
+    request: Request,
+    conteudo: str = Form(""),
+    anexo: UploadFile = File(None),
+):
     user_id = request.session.get("user_id")
     if not user_id:
         return RedirectResponse(url="/", status_code=302)
 
     conteudo = conteudo.strip()
-    if not conteudo:
+    file_url, file_name, upload_error = save_post_attachment(anexo)
+    if upload_error:
+        set_flash(request, upload_error)
+        return RedirectResponse(url="/feed", status_code=302)
+
+    if not conteudo and not file_url:
         return RedirectResponse(url="/feed", status_code=302)
 
     conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO posts (user_id, conteudo, criado_em) VALUES (?, ?, ?)",
-        (user_id, conteudo, datetime.now().isoformat(timespec="seconds")),
+        "INSERT INTO posts (user_id, conteudo, file_url, file_name, criado_em) VALUES (?, ?, ?, ?, ?)",
+        (user_id, conteudo, file_url, file_name, datetime.now().isoformat(timespec="seconds")),
     )
     conn.commit()
     conn.close()
@@ -1481,7 +1643,7 @@ def delete_post(post_id: int, request: Request):
     cursor = conn.cursor()
     cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
     acting_user = cursor.fetchone()
-    cursor.execute("SELECT user_id FROM posts WHERE id = ?", (post_id,))
+    cursor.execute("SELECT user_id, file_url FROM posts WHERE id = ?", (post_id,))
     post = cursor.fetchone()
     can_delete = post and (post["user_id"] == user_id or (acting_user and acting_user["role"] in ("lider", "admin")))
     if can_delete:
@@ -1490,6 +1652,12 @@ def delete_post(post_id: int, request: Request):
         cursor.execute("DELETE FROM reports WHERE target_type = 'post' AND target_id = ?", (post_id,))
         cursor.execute("DELETE FROM posts WHERE id = ?", (post_id,))
         conn.commit()
+        file_path = resolve_photo_storage_path(post.get("file_url"))
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
         set_flash(request, "Publicação removida com sucesso.")
     conn.close()
     return RedirectResponse(url="/feed", status_code=302)

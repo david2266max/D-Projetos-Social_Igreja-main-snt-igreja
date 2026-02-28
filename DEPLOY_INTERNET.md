@@ -32,6 +32,15 @@ Este projeto já está preparado para deploy em nuvem.
   - Com `DATABASE_URL`, o app usa Postgres automaticamente.
   - Nesse modo, backup SQLite do painel fica desativado.
 
+### 4.1) Persistência de arquivos (fotos/chat)
+- No Render free, arquivos locais podem ser perdidos após restart/deploy.
+- Para manter fotos e anexos permanentemente, configure **Cloudinary**:
+  - `CLOUDINARY_CLOUD_NAME`
+  - `CLOUDINARY_API_KEY`
+  - `CLOUDINARY_API_SECRET`
+  - `CLOUDINARY_FOLDER` (opcional, padrão: `snt-igreja`)
+- Com essas variáveis, uploads de perfil/galeria/chat vão para URL externa.
+
 ### 5) Verificação
 - Abra:
   - `/health` para checar se está no ar
