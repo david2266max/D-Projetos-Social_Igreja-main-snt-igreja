@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
+from backup_sqlite import create_sqlite_backup, ensure_dir, prune_old_backups
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +26,8 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "social-igreja-chave-local")
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "5"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+BACKUP_DIR = os.getenv("BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
+BACKUP_KEEP = int(os.getenv("BACKUP_KEEP", "15"))
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
@@ -1709,6 +1712,35 @@ def reject_user_registration(target_user_id: int, request: Request):
                 pass
 
     set_flash(request, "Solicitação de cadastro recusada e usuário removido.")
+    return RedirectResponse(url="/feed", status_code=302)
+
+
+@app.post("/admin/backups/create")
+def create_backup_now(request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/", status_code=302)
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    acting_user = cursor.fetchone()
+    conn.close()
+
+    if not is_admin(acting_user):
+        return RedirectResponse(url="/feed", status_code=302)
+
+    try:
+        ensure_dir(BACKUP_DIR)
+        backup_path = create_sqlite_backup(DB_PATH, BACKUP_DIR, "social_igreja_web")
+        removed = prune_old_backups(BACKUP_DIR, "social_igreja_web", BACKUP_KEEP)
+        set_flash(
+            request,
+            f"Backup criado: {os.path.basename(backup_path)}. Removidos {len(removed)} arquivo(s) antigos.",
+        )
+    except Exception as err:
+        set_flash(request, f"Falha ao criar backup: {err}")
+
     return RedirectResponse(url="/feed", status_code=302)
 
 

@@ -203,6 +203,11 @@
             {% endif %}
 
             {% if is_admin %}
+                <div class="section-label">Backup do banco</div>
+                <form method="post" action="/admin/backups/create" class="inline-mini">
+                    <button type="submit" class="btn-light">Criar backup SQLite agora</button>
+                </form>
+
                 <div class="section-label">Aprovação de cadastros</div>
                 <div class="members">
                     {% for pending in pending_registrations %}
