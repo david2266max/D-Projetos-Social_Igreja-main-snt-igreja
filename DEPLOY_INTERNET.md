@@ -34,6 +34,18 @@ Este projeto já está preparado para deploy em nuvem.
   - `/` para login
   - `/register` para cadastro
 
+### 6) Backup automático do SQLite (com retenção)
+- Este projeto agora inclui o script `backup_sqlite.py`.
+- No **Shell** do Render, execute:
+
+```bash
+python backup_sqlite.py --keep 15
+```
+
+- Isso cria backup em `/var/data/backups` e mantém apenas os 15 mais recentes.
+- Para restaurar, copie o arquivo desejado para:
+  - `/var/data/social_igreja_web.db`
+
 ---
 
 ## Se quiser domínio próprio
