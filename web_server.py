@@ -817,6 +817,8 @@ def healthcheck():
             "users": total_users,
             "db_backend": "postgres" if USE_POSTGRES else "sqlite",
             "db_path": "external-postgres" if USE_POSTGRES else DB_PATH,
+            "database_url_configured": bool(DATABASE_URL),
+            "postgres_driver_available": bool(psycopg),
         }
     except DBError:
         return {"status": "degraded", "db": "error"}
