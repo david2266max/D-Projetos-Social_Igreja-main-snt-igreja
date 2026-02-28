@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galeria de Fotos - Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <strong>{{ user['nome'] }}</strong>
+            <small>Galeria de fotos • {{ user['igreja'] }}</small>
+        </div>
+        <a href="/feed" class="logout">Voltar ao feed</a>
+    </header>
+
+    <main class="container two-columns-feed">
+        <section class="card">
+            <h1>Postar foto</h1>
+            {% if flash %}
+                <div class="alert">{{ flash }}</div>
+            {% endif %}
+            <form method="post" action="/photos" enctype="multipart/form-data" class="form">
+                <label>Legenda (opcional)</label>
+                <textarea name="caption" rows="3" placeholder="Escreva algo sobre a foto"></textarea>
+
+                <label>Imagem</label>
+                <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp" required>
+
+                <button type="submit">Publicar foto</button>
+            </form>
+        </section>
+
+        <aside class="card">
+            <div class="section-label">Dica</div>
+            <div class="alert">Todas as fotos postadas aqui ficam visíveis para usuários logados.</div>
+        </aside>
+    </main>
+
+    <main class="container">
+        <section class="card">
+            <h2>Fotos da comunidade</h2>
+            <div class="feed-list">
+                {% for photo in photo_posts %}
+                    <article class="post">
+                        <img src="{{ photo['foto_url'] }}" alt="Foto de {{ photo['nome'] }}" class="avatar">
+                        <div class="post-body">
+                            <strong>{{ photo['nome'] }}</strong>
+                            <small>{{ photo['igreja'] }} • {{ photo['cidade'] }}/{{ photo['pais'] }} • {{ photo['criado_em'] }}</small>
+                            {% if photo['caption'] %}
+                                <p>{{ photo['caption'] }}</p>
+                            {% endif %}
+                            <img src="{{ photo['image_url'] }}" alt="Foto publicada por {{ photo['nome'] }}" class="post-photo">
+
+                            <div class="post-actions">
+                                <form method="post" action="/photos/{{ photo['id'] }}/like">
+                                    <button type="submit" class="btn-light">
+                                        {% if photo['liked_by_me'] %}Descurtir{% else %}Curtir{% endif %} ({{ photo['likes_count'] }})
+                                    </button>
+                                </form>
+                                {% if photo['user_id'] == user['id'] %}
+                                    <form method="post" action="/photos/{{ photo['id'] }}/delete" onsubmit="return confirm('Deseja excluir esta foto?')">
+                                        <button type="submit" class="btn-danger">Excluir</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+
+                            <div class="comments">
+                                {% for comment in comments_by_photo.get(photo['id'], []) %}
+                                    <div class="comment-item">
+                                        <strong>{{ comment['nome'] }}</strong>
+                                        <small>{{ comment['criado_em'] }}</small>
+                                        <p>{{ comment['conteudo'] }}</p>
+                                    </div>
+                                {% endfor %}
+                                <form method="post" action="/photos/{{ photo['id'] }}/comments" class="comment-form">
+                                    <input type="text" name="conteudo" placeholder="Comentar esta foto" required>
+                                    <button type="submit" class="btn-light">Enviar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+                {% else %}
+                    <p>Ainda não há fotos publicadas.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+</body>
+</html>

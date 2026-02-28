@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <strong>{{ user['nome'] }}</strong>
+            <small>Chat • {{ user['igreja'] }} • {{ user['cidade'] }}/{{ user['pais'] }}</small>
+        </div>
+        <a href="/feed" class="logout">Voltar ao feed</a>
+    </header>
+
+    <main class="container two-columns-feed">
+        <aside class="card">
+            <div class="section-label">Conversas</div>
+            <div class="members">
+                {% for conv in conversations %}
+                    <div class="member">
+                        <div>
+                            <strong>{{ conv['display_name'] }}</strong>
+                            <small>{{ conv['type']|upper }}</small>
+                            {% if conv['unread_count'] > 0 %}
+                                <small>💬 {{ conv['unread_count'] }} nova(s)</small>
+                            {% endif %}
+                            {% if conv['last_message'] %}
+                                <small>{{ conv['last_message'] }}</small>
+                            {% else %}
+                                <small>Sem mensagens ainda</small>
+                            {% endif %}
+                            <a href="/chat?conversation_id={{ conv['id'] }}" class="profile-link">Abrir</a>
+                        </div>
+                    </div>
+                {% else %}
+                    <p>Nenhuma conversa ainda.</p>
+                {% endfor %}
+            </div>
+
+            <div class="section-label">Nova conversa em dupla</div>
+            <div class="members">
+                {% for known in known_contacts %}
+                    <div class="member">
+                        <img src="{{ known['foto_url'] }}" alt="Foto de {{ known['nome'] }}" class="avatar">
+                        <div>
+                            <strong>{{ known['nome'] }}</strong>
+                            <small>{{ known['igreja'] }}</small>
+                            <form method="post" action="/chat/dm/{{ known['id'] }}" class="inline-mini">
+                                <button type="submit" class="btn-light">Conversar</button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    <p>Adicione conhecidos para iniciar conversas em dupla.</p>
+                {% endfor %}
+            </div>
+
+            <div class="section-label">Criar grupo</div>
+            <form method="post" action="/chat/groups" class="form">
+                <input type="text" name="name" placeholder="Nome do grupo" required>
+                <label>Selecione membros (mínimo 2):</label>
+                <select name="member_ids" multiple size="6" required>
+                    {% for known in known_contacts %}
+                        <option value="{{ known['id'] }}">{{ known['nome'] }} ({{ known['igreja'] }})</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Criar grupo</button>
+            </form>
+        </aside>
+
+        <section class="card">
+            <h1>{{ selected_title or 'Selecione uma conversa' }}</h1>
+            {% if flash %}
+                <div class="alert">{{ flash }}</div>
+            {% endif %}
+
+            {% if selected_conversation %}
+                <div class="section-label">Participantes</div>
+                <div class="members">
+                    {% for member in conversation_members %}
+                        <div class="member">
+                            <img src="{{ member['foto_url'] }}" alt="Foto de {{ member['nome'] }}" class="avatar">
+                            <div>
+                                <strong>{{ member['nome'] }}</strong>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div class="section-label">Mensagens</div>
+                <div class="feed-list">
+                    {% for msg in conversation_messages %}
+                        <article class="post">
+                            <img src="{{ msg['sender_foto'] }}" alt="Foto de {{ msg['sender_nome'] }}" class="avatar">
+                            <div class="post-body">
+                                <strong>{{ msg['sender_nome'] }}</strong>
+                                <small>{{ msg['criado_em'] }}</small>
+                                {% if msg['conteudo'] %}
+                                    <p>{{ msg['conteudo'] }}</p>
+                                {% endif %}
+                                {% if msg['file_url'] %}
+                                    <a href="{{ msg['file_url'] }}" target="_blank" class="profile-link">Arquivo: {{ msg['file_name'] or 'anexo' }}</a>
+                                {% endif %}
+                            </div>
+                        </article>
+                    {% else %}
+                        <p>Sem mensagens nesta conversa.</p>
+                    {% endfor %}
+                </div>
+
+                <div class="section-label">Enviar mensagem</div>
+                <form method="post" action="/chat/{{ selected_conversation_id }}/messages" enctype="multipart/form-data" class="form">
+                    <textarea name="conteudo" rows="3" placeholder="Digite sua mensagem"></textarea>
+                    <input type="file" name="file">
+                    <button type="submit">Enviar</button>
+                </form>
+            {% else %}
+                <p>Abra uma conversa à esquerda para começar.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

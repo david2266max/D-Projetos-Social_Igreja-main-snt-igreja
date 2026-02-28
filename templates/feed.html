@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feed - Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <strong>{{ user['nome'] }}</strong>
+            <small>{{ user['igreja'] }} • {{ user['cidade'] }}/{{ user['pais'] }} • {{ user['role']|upper }}</small>
+        </div>
+        {% if pending_received_count > 0 %}
+            <div class="notif-badge">{{ pending_received_count }} solicitação(ões) de conhecido pendente(s)</div>
+        {% endif %}
+        <a href="/logout" class="logout">Sair</a>
+    </header>
+
+    <main class="container two-columns-feed">
+        <section class="card">
+            <h1>Feed da Comunidade</h1>
+            <div class="stats-grid community-stats">
+                <div class="stat-card">
+                    <strong>{{ community_stats['total_members'] }}</strong>
+                    <small>Membros na rede</small>
+                </div>
+                <div class="stat-card">
+                    <strong>{{ community_stats['total_posts'] }}</strong>
+                    <small>Publicações na comunidade</small>
+                </div>
+            </div>
+            {% if flash %}
+                <div class="alert">{{ flash }}</div>
+            {% endif %}
+            {% if pending_received_count > 0 %}
+                <div class="alert alert-warning">
+                    Você tem {{ pending_received_count }} solicitação(ões) pendente(s). Veja em "Solicitações recebidas".
+                </div>
+            {% endif %}
+            <form method="post" action="/posts" class="form">
+                <label>Nova publicação</label>
+                <textarea name="conteudo" rows="4" placeholder="Compartilhe uma palavra, aviso ou testemunho"></textarea>
+                <button type="submit">Publicar</button>
+            </form>
+
+            <div class="feed-list">
+                {% for post in posts %}
+                    <article class="post">
+                        <img src="{{ post['foto_url'] }}" alt="Foto de {{ post['nome'] }}" class="avatar">
+                        <div class="post-body">
+                            {% if post['user_id'] == user['id'] or post['user_id'] in known_ids %}
+                                <h3><a href="/users/{{ post['user_id'] }}" class="profile-link">{{ post['nome'] }}</a></h3>
+                            {% else %}
+                                <h3>{{ post['nome'] }}</h3>
+                            {% endif %}
+                            <small>{{ post['igreja'] }} • {{ post['cidade'] }}/{{ post['pais'] }} • {{ post['criado_em'] }}</small>
+                            <p>{{ post['conteudo'] }}</p>
+
+                            <div class="post-actions">
+                                <form method="post" action="/posts/{{ post['id'] }}/like">
+                                    <button type="submit" class="btn-light">
+                                        {% if post['liked_by_me'] %}Descurtir{% else %}Curtir{% endif %} ({{ post['likes_count'] }})
+                                    </button>
+                                </form>
+                                <form method="post" action="/posts/{{ post['id'] }}/report" class="inline-mini">
+                                    <input type="text" name="motivo" placeholder="Motivo denúncia" required>
+                                    <button type="submit" class="btn-warning">Denunciar</button>
+                                </form>
+                                {% if post['user_id'] == user['id'] %}
+                                    <form method="post" action="/posts/{{ post['id'] }}/delete" onsubmit="return confirm('Deseja excluir esta publicação?')">
+                                        <button type="submit" class="btn-danger">Excluir</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+
+                            <div class="comments">
+                                {% for comment in comments_by_post.get(post['id'], []) %}
+                                    <div class="comment-item">
+                                        <strong>{{ comment['nome'] }}</strong>
+                                        <small>{{ comment['criado_em'] }}</small>
+                                        <p>{{ comment['conteudo'] }}</p>
+                                        <form method="post" action="/comments/{{ comment['id'] }}/report" class="inline-mini">
+                                            <input type="text" name="motivo" placeholder="Motivo denúncia" required>
+                                            <button type="submit" class="btn-warning">Denunciar comentário</button>
+                                        </form>
+                                    </div>
+                                {% endfor %}
+                                <form method="post" action="/posts/{{ post['id'] }}/comments" class="comment-form">
+                                    <input type="text" name="conteudo" placeholder="Comentar" required>
+                                    <button type="submit" class="btn-light">Enviar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+                {% else %}
+                    <p>Ainda não há publicações.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <aside class="card">
+            <div class="section-label">Perfil do usuário</div>
+            <div class="profile-box">
+                <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar profile-avatar">
+                <div>
+                    <strong>{{ user['nome'] }}</strong>
+                    <small>{{ user['faixa_etaria'] }} • {{ user['role']|upper }}</small>
+                    <small>{{ user['igreja'] }}</small>
+                    <small>{{ user['cidade'] }}/{{ user['pais'] }}</small>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card"><strong>{{ profile_stats['my_posts'] }}</strong><small>Meus posts</small></div>
+                <div class="stat-card"><strong>{{ profile_stats['my_comments'] }}</strong><small>Comentários</small></div>
+                <div class="stat-card"><strong>{{ profile_stats['my_known'] }}</strong><small>Conhecidos</small></div>
+                <div class="stat-card"><strong>{{ profile_stats['my_likes_received'] }}</strong><small>Curtidas recebidas</small></div>
+            </div>
+
+            <div class="section-label">Indicadores</div>
+            <div class="stats-grid">
+                <div class="stat-card"><strong>📝 {{ profile_stats['my_posts'] }}</strong><small>Publicações</small></div>
+                <div class="stat-card"><strong>💬 {{ unread_chat_count }}</strong><small>Mensagens não lidas</small></div>
+                <div class="stat-card"><strong>🤝 {{ pending_received_count }}</strong><small>Aceitar amizade</small></div>
+                <div class="stat-card"><strong>📨 {{ pending_sent_count }}</strong><small>Convites enviados</small></div>
+            </div>
+
+            <div class="section-label">Buscar membros</div>
+            <form method="get" action="/feed" class="form inline-form">
+                <input type="text" name="q" value="{{ busca }}" placeholder="Nome, igreja, cidade ou país">
+                <button type="submit" class="btn-light">Buscar</button>
+            </form>
+
+            <div class="section-label">Membros</div>
+            <div class="members">
+                {% for member in members %}
+                    <div class="member">
+                        <img src="{{ member['foto_url'] }}" alt="Foto de {{ member['nome'] }}" class="avatar">
+                        <div>
+                            <strong>{{ member['nome'] }}</strong>
+                            <small>{{ member['faixa_etaria'] }} • {{ member['igreja'] }} • {{ member['role'] }}</small>
+                            <small>{{ member['cidade'] }}/{{ member['pais'] }}</small>
+                            {% if member['id'] != user['id'] and member['id'] in known_ids %}
+                                <a href="/users/{{ member['id'] }}" class="profile-link">Ver perfil</a>
+                            {% endif %}
+                            {% if member['id'] != user['id'] and member['whatsapp_link'] %}
+                                <a href="{{ member['whatsapp_link'] }}" target="_blank" class="profile-link">📲 Convidar no WhatsApp</a>
+                            {% endif %}
+                            {% if member['id'] != user['id'] %}
+                                {% if member['id'] in known_ids %}
+                                    <form method="post" action="/connections/{{ member['id'] }}/remove" class="inline-mini">
+                                        <button type="submit" class="btn-light">Remover conhecido</button>
+                                    </form>
+                                {% elif member['id'] in pending_sent_ids %}
+                                    <form class="inline-mini">
+                                        <button type="button" class="btn-warning" disabled>Solicitação pendente</button>
+                                    </form>
+                                {% else %}
+                                    <form method="post" action="/connections/{{ member['id'] }}/request" class="inline-mini">
+                                        <button type="submit" class="btn-light">Enviar solicitação</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                            {% if is_admin and member['id'] != user['id'] %}
+                                <form method="post" action="/admin/users/{{ member['id'] }}/role" class="inline-mini">
+                                    <select name="new_role">
+                                        <option value="membro" {% if member['role'] == 'membro' %}selected{% endif %}>membro</option>
+                                        <option value="lider" {% if member['role'] == 'lider' %}selected{% endif %}>lider</option>
+                                        <option value="admin" {% if member['role'] == 'admin' %}selected{% endif %}>admin</option>
+                                    </select>
+                                    <button type="submit" class="btn-light">Salvar função</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if is_moderator %}
+                <div class="section-label">Painel de moderação</div>
+                <div class="members">
+                    {% for report in reports %}
+                        <div class="member">
+                            <div>
+                                <strong>#{{ report['id'] }} • {{ report['target_type'] }} {{ report['target_id'] }}</strong>
+                                <small>Por: {{ report['reporter_nome'] }} • {{ report['criado_em'] }}</small>
+                                <p>{{ report['motivo'] }}</p>
+                                <div class="post-actions">
+                                    <form method="post" action="/moderation/reports/{{ report['id'] }}/resolve">
+                                        <button type="submit" class="btn-light">Marcar resolvida</button>
+                                    </form>
+                                    <form method="post" action="/moderation/reports/{{ report['id'] }}/remove-target">
+                                        <button type="submit" class="btn-danger">Remover conteúdo</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p>Não há denúncias abertas.</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="section-label">Solicitações recebidas</div>
+            <div class="members">
+                {% for req in pending_received %}
+                    <div class="member">
+                        <img src="{{ req['foto_url'] }}" alt="Foto de {{ req['nome'] }}" class="avatar">
+                        <div>
+                            <strong>{{ req['nome'] }}</strong>
+                            <small>{{ req['igreja'] }}</small>
+                            <small>{{ req['cidade'] }}/{{ req['pais'] }}</small>
+                            <div class="post-actions">
+                                <form method="post" action="/connections/requests/{{ req['id'] }}/accept">
+                                    <button type="submit" class="btn-light">Aceitar</button>
+                                </form>
+                                <form method="post" action="/connections/requests/{{ req['id'] }}/reject">
+                                    <button type="submit" class="btn-danger">Recusar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <p>Você não tem solicitações pendentes.</p>
+                {% endfor %}
+            </div>
+
+            <div class="section-label">Meus conhecidos</div>
+            <div class="members">
+                {% for known in known_contacts %}
+                    <div class="member">
+                        <img src="{{ known['foto_url'] }}" alt="Foto de {{ known['nome'] }}" class="avatar">
+                        <div>
+                            <strong>{{ known['nome'] }}</strong>
+                            <small>{{ known['igreja'] }}</small>
+                            <small>{{ known['cidade'] }}/{{ known['pais'] }}</small>
+                            <a href="/users/{{ known['id'] }}" class="profile-link">Ver perfil</a>
+                            {% if known['whatsapp_link'] %}
+                                <a href="{{ known['whatsapp_link'] }}" target="_blank" class="profile-link">📲 Convidar no WhatsApp</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <p>Você ainda não marcou conhecidos.</p>
+                {% endfor %}
+            </div>
+
+            <div class="section-label">Editar perfil</div>
+            <a href="/profile/edit" class="profile-link">Abrir página de edição de perfil</a>
+
+            <div class="section-label">Chat</div>
+            <a href="/chat" class="profile-link">Abrir chat (dupla e grupo)</a>
+
+            <div class="section-label">Fotos</div>
+            <a href="/photos" class="profile-link">Abrir galeria de fotos</a>
+        </aside>
+    </main>
+</body>
+</html>

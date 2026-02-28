@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar perfil - Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <strong>{{ user['nome'] }}</strong>
+            <small>{{ user['igreja'] }} • {{ user['cidade'] }}/{{ user['pais'] }} • {{ user['role']|upper }}</small>
+        </div>
+    </header>
+
+    <main class="container register-single">
+        <section class="card">
+            <h1>Editar perfil</h1>
+            <p class="subtitle">Atualize seus dados pessoais e foto</p>
+            {% if flash %}
+                <div class="alert">{{ flash }}</div>
+            {% endif %}
+
+            <div class="section-label">Armazenamento da foto</div>
+            <div class="alert">
+                <div><strong>URL:</strong> {{ photo_url }}</div>
+                <div><strong>Arquivo:</strong> {{ photo_storage_path }}</div>
+                <div><strong>Pasta de uploads:</strong> {{ upload_dir }}</div>
+            </div>
+
+            <form method="post" action="/profile" enctype="multipart/form-data" class="form">
+                <label>Nome</label>
+                <input type="text" name="nome" value="{{ user['nome'] }}" required>
+
+                <label>Igreja</label>
+                <input type="text" name="igreja" value="{{ user['igreja'] }}" required>
+
+                <label>Cidade</label>
+                <input type="text" name="cidade" value="{{ user['cidade'] }}" required>
+
+                <label>País</label>
+                <input type="text" name="pais" value="{{ user['pais'] }}" required>
+
+                <label>Telefone (com DDD e país)</label>
+                <input type="text" name="telefone" class="phone-mask" inputmode="numeric" value="{{ user['telefone'] }}" placeholder="+55 (11) 99999-9999" maxlength="20">
+
+                <label>Faixa etária</label>
+                <select name="faixa_etaria" required>
+                    <option value="Jovem" {% if user['faixa_etaria'] == 'Jovem' %}selected{% endif %}>Jovem</option>
+                    <option value="Adulto" {% if user['faixa_etaria'] == 'Adulto' %}selected{% endif %}>Adulto</option>
+                </select>
+
+                <label>Nova senha (opcional)</label>
+                <input type="password" name="nova_senha" minlength="8" placeholder="Mínimo 8 caracteres">
+
+                <label>Nova foto (opcional)</label>
+                <input type="file" name="foto" accept=".jpg,.jpeg,.png,.webp">
+
+                <div class="form-actions">
+                    <button type="submit">Salvar</button>
+                    <a href="/feed" class="btn-cancel">Cancelar</a>
+                </div>
+            </form>
+        </section>
+    </main>
+</body>
+<script>
+    function formatPhone(value) {
+        const digits = (value || '').replace(/\D/g, '').slice(0, 15);
+        if (!digits) return '';
+        if (digits.startsWith('55')) {
+            const ddd = digits.slice(2, 4);
+            const part1 = digits.slice(4, 9);
+            const part2 = digits.slice(9, 13);
+            let result = '+55';
+            if (ddd) result += ` (${ddd}`;
+            if (ddd.length === 2) result += ')';
+            if (part1) result += ` ${part1}`;
+            if (part2) result += `-${part2}`;
+            return result;
+        }
+        return `+${digits}`;
+    }
+
+    document.querySelectorAll('.phone-mask').forEach((input) => {
+        input.addEventListener('input', (event) => {
+            event.target.value = formatPhone(event.target.value);
+        });
+        input.value = formatPhone(input.value);
+    });
+</script>
+</html>

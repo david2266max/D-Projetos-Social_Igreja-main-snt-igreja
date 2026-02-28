@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Criar conta - Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="container register-single">
+        <section class="card">
+            <h1>Criar conta</h1>
+            <p class="subtitle">Cadastro para membros Sara Nossa Terra</p>
+            {% if cadastro_msg %}
+                <div class="alert">{{ cadastro_msg }}</div>
+            {% endif %}
+            <form method="post" action="/register" enctype="multipart/form-data" class="form">
+                <label>Nome</label>
+                <input type="text" name="nome" required>
+
+                <label>E-mail</label>
+                <input type="email" name="email" required>
+
+                <label>Senha</label>
+                <input type="password" name="senha" minlength="8" required>
+
+                <label>Igreja Sara Nossa Terra</label>
+                <input type="text" name="igreja" required>
+
+                <label>Cidade</label>
+                <input type="text" name="cidade" required>
+
+                <label>País</label>
+                <input type="text" name="pais" value="Brasil" required>
+
+                <label>Telefone (com DDD e país, ex: 5511999999999)</label>
+                <input type="text" name="telefone" class="phone-mask" inputmode="numeric" placeholder="+55 (11) 99999-9999" maxlength="20">
+
+                <label>Faixa etária</label>
+                <select name="faixa_etaria" required>
+                    <option value="Jovem">Jovem</option>
+                    <option value="Adulto">Adulto</option>
+                </select>
+
+                <label>Foto de perfil</label>
+                <input type="file" name="foto" accept=".jpg,.jpeg,.png,.webp" required>
+
+                <label class="check"><input type="checkbox" name="revisao_vidas"> Já participei da Revisão de Vidas</label>
+                <label class="check"><input type="checkbox" name="batizado_aguas"> Sou batizado(a) nas águas</label>
+
+                <button type="submit">Cadastrar</button>
+            </form>
+
+            <p class="link-label">Já tem conta? <a href="/">Clique aqui para entrar</a></p>
+        </section>
+    </main>
+</body>
+<script>
+    function formatPhone(value) {
+        const digits = (value || '').replace(/\D/g, '').slice(0, 15);
+        if (!digits) return '';
+        if (digits.startsWith('55')) {
+            const ddd = digits.slice(2, 4);
+            const part1 = digits.slice(4, 9);
+            const part2 = digits.slice(9, 13);
+            let result = '+55';
+            if (ddd) result += ` (${ddd}`;
+            if (ddd.length === 2) result += ')';
+            if (part1) result += ` ${part1}`;
+            if (part2) result += `-${part2}`;
+            return result;
+        }
+        return `+${digits}`;
+    }
+
+    document.querySelectorAll('.phone-mask').forEach((input) => {
+        input.addEventListener('input', (event) => {
+            event.target.value = formatPhone(event.target.value);
+        });
+        input.value = formatPhone(input.value);
+    });
+</script>
+</html>

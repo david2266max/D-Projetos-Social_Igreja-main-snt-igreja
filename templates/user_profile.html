@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil de {{ user['nome'] }} - Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <strong>{{ user['nome'] }}</strong>
+            <small>{{ user['igreja'] }} • {{ user['cidade'] }}/{{ user['pais'] }} • {{ user['role']|upper }}</small>
+        </div>
+        <a href="/feed" class="logout">Voltar ao feed</a>
+    </header>
+
+    <main class="container two-columns-feed">
+        <section class="card">
+            <h1>Publicações de {{ user['nome'] }}</h1>
+            <div class="feed-list">
+                {% for post in user_posts %}
+                    <article class="post">
+                        <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar">
+                        <div class="post-body">
+                            <small>{{ post['criado_em'] }} • {{ post['likes_count'] }} curtidas</small>
+                            <p>{{ post['conteudo'] }}</p>
+                        </div>
+                    </article>
+                {% else %}
+                    <p>Este usuário ainda não publicou nada.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <aside class="card">
+            <div class="section-label">Resumo do perfil</div>
+            <div class="profile-box">
+                <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar profile-avatar">
+                <div>
+                    <strong>{{ user['nome'] }}</strong>
+                    <small>{{ user['faixa_etaria'] }}</small>
+                    <small>{{ user['igreja'] }}</small>
+                    <small>{{ user['cidade'] }}/{{ user['pais'] }}</small>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card"><strong>{{ posts_count }}</strong><small>Publicações</small></div>
+                <div class="stat-card"><strong>{{ known_count }}</strong><small>Conhecidos</small></div>
+                <div class="stat-card"><strong>{{ likes_received }}</strong><small>Curtidas recebidas</small></div>
+            </div>
+
+            <div class="section-label">Armazenamento da foto</div>
+            <div class="alert">
+                <div><strong>URL:</strong> {{ photo_url }}</div>
+                <div><strong>Arquivo:</strong> {{ photo_storage_path }}</div>
+                <div><strong>Pasta de uploads:</strong> {{ upload_dir }}</div>
+            </div>
+        </aside>
+    </main>
+</body>
+</html>

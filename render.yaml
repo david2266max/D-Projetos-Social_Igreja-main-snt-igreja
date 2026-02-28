@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: snt-igreja
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: uvicorn web_server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATA_DIR
+        value: /var/data
+      - key: DB_PATH
+        value: /var/data/social_igreja_web.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MAX_UPLOAD_MB
+        value: 5
+    disk:
+      name: snt-igreja-data
+      mountPath: /var/data
+      sizeGB: 1

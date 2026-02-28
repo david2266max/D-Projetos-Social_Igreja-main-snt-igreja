@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rede Social Sara Nossa Terra</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="container login-single">
+        <section class="card">
+            <h1>Entrar</h1>
+            <p class="subtitle">Rede social para membros Sara Nossa Terra</p>
+            {% if error %}
+                <div class="alert error">{{ error }}</div>
+            {% endif %}
+            {% if cadastro_msg %}
+                <div class="alert">{{ cadastro_msg }}</div>
+            {% endif %}
+            <form method="post" action="/login" class="form">
+                <label>E-mail</label>
+                <input type="email" name="email" required>
+                <label>Senha</label>
+                <input type="password" name="senha" required>
+                <button type="submit">Entrar</button>
+            </form>
+            <p class="link-label">Não tem conta? <a href="/register">Clique aqui para criar conta</a></p>
+        </section>
+    </main>
+</body>
+</html>
