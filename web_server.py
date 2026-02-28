@@ -842,6 +842,11 @@ def home(request: Request):
     )
 
 
+@app.get("/login")
+def login_page(request: Request):
+    return home(request)
+
+
 @app.get("/register")
 def register_page(request: Request):
     user_id = request.session.get("user_id")
