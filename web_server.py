@@ -875,6 +875,11 @@ def feed(request: Request):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     current_user = cursor.fetchone()
+    if not current_user:
+        conn.close()
+        request.session.clear()
+        set_flash(request, "Sua sessão expirou. Faça login novamente.")
+        return RedirectResponse(url="/", status_code=302)
 
     busca = request.query_params.get("q", "").strip().lower()
 
@@ -1101,6 +1106,11 @@ def photos_page(request: Request):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     current_user = cursor.fetchone()
+    if not current_user:
+        conn.close()
+        request.session.clear()
+        set_flash(request, "Sua sessão expirou. Faça login novamente.")
+        return RedirectResponse(url="/", status_code=302)
 
     cursor.execute(
         """
@@ -1343,6 +1353,11 @@ def profile_edit_page(request: Request):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     current_user = cursor.fetchone()
+    if not current_user:
+        conn.close()
+        request.session.clear()
+        set_flash(request, "Sua sessão expirou. Faça login novamente.")
+        return RedirectResponse(url="/", status_code=302)
 
     admin_candidates = []
     if current_user and current_user["role"] == "admin":
@@ -2035,6 +2050,11 @@ def chat_page(request: Request, conversation_id: Optional[int] = None):
 
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     current_user = cursor.fetchone()
+    if not current_user:
+        conn.close()
+        request.session.clear()
+        set_flash(request, "Sua sessão expirou. Faça login novamente.")
+        return RedirectResponse(url="/", status_code=302)
 
     cursor.execute(
         """
