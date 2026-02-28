@@ -1472,7 +1472,11 @@ async def update_profile(
 
 
 @app.post("/profile/delete")
-def delete_profile(request: Request, replacement_admin_id: str = Form("")):
+def delete_profile(
+    request: Request,
+    replacement_admin_id: str = Form(""),
+    confirm_delete_text: str = Form(""),
+):
     user_id = request.session.get("user_id")
     if not user_id:
         return RedirectResponse(url="/", status_code=302)
@@ -1485,6 +1489,11 @@ def delete_profile(request: Request, replacement_admin_id: str = Form("")):
         conn.close()
         request.session.clear()
         return RedirectResponse(url="/", status_code=302)
+
+    if confirm_delete_text.strip().upper() != "EXCLUIR":
+        conn.close()
+        set_flash(request, "Para excluir o perfil, digite EXCLUIR no campo de confirmação.")
+        return RedirectResponse(url="/profile/edit", status_code=302)
 
     if current_user["role"] == "admin":
         replacement_admin_id = replacement_admin_id.strip()
