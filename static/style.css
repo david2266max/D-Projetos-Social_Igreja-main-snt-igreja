@@ -248,6 +248,10 @@ button {
     margin-top: 8px;
 }
 
+.post-attachment-preview {
+    max-width: 50%;
+}
+
 .post-attachment-media,
 .post-attachment-doc {
     width: 100%;
@@ -406,5 +410,9 @@ button {
     .two-columns,
     .two-columns-feed {
         grid-template-columns: 1fr;
+    }
+
+    .post-attachment-preview {
+        max-width: 100%;
     }
 }
