@@ -66,7 +66,18 @@ def init_db():
         try:
             cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'membro'")
         except sqlite3.OperationalError:
-            pass
+            cursor.execute("PRAGMA table_info(users)")
+            user_columns = [row[1] for row in cursor.fetchall()]
+            if "role" not in user_columns:
+                raise
+    if "telefone" not in user_columns:
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN telefone TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            cursor.execute("PRAGMA table_info(users)")
+            user_columns = [row[1] for row in cursor.fetchall()]
+            if "telefone" not in user_columns:
+                raise
 
     cursor.execute(
         """
@@ -232,6 +243,21 @@ def init_db():
             criado_em TEXT NOT NULL,
             FOREIGN KEY (conversation_id) REFERENCES conversations(id),
             FOREIGN KEY (sender_user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conversation_reads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            last_read_message_id INTEGER NOT NULL DEFAULT 0,
+            atualizado_em TEXT NOT NULL,
+            UNIQUE(conversation_id, user_id),
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )
         """
     )
