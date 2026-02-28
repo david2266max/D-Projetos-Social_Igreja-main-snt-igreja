@@ -833,11 +833,23 @@ def login(request: Request, email: str = Form(...), senha: str = Form(...)):
     )
     user = cursor.fetchone()
 
-    if not user or not verify_password(senha, user["senha_hash"]):
+    if not user:
+        cursor.execute("SELECT COUNT(*) AS total FROM users")
+        total_users = cursor.fetchone()["total"]
+        conn.close()
+        error_msg = "E-mail não encontrado."
+        if total_users == 0:
+            error_msg = "Nenhum usuário cadastrado no banco. Faça um novo cadastro para recriar o acesso."
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": error_msg, "cadastro_msg": None},
+        )
+
+    if not verify_password(senha, user["senha_hash"]):
         conn.close()
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "error": "E-mail ou senha inválidos.", "cadastro_msg": None},
+            {"request": request, "error": "Senha inválida.", "cadastro_msg": None},
         )
 
     if not user["approved"]:
