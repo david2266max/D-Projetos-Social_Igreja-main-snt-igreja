@@ -703,7 +703,6 @@ async def register(
     pais: str = Form(...),
     telefone: str = Form(""),
     faixa_etaria: str = Form(...),
-    solicitar_permissao: str = Form("off"),
     revisao_vidas: str = Form("off"),
     batizado_aguas: str = Form("off"),
     foto: UploadFile = File(...),
@@ -734,15 +733,6 @@ async def register(
             {
                 "request": request,
                 "cadastro_msg": "Cadastro permitido apenas para membros com Revisão de Vidas e batismo nas águas.",
-            },
-        )
-
-    if solicitar_permissao != "on":
-        return templates.TemplateResponse(
-            "register.html",
-            {
-                "request": request,
-                "cadastro_msg": "Você precisa solicitar permissão para cadastro.",
             },
         )
 
