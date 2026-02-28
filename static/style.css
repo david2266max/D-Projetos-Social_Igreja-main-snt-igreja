@@ -244,6 +244,30 @@ button {
     border: 1px solid #dce2f1;
 }
 
+.post-attachment {
+    margin-top: 8px;
+}
+
+.post-attachment-media,
+.post-attachment-doc {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #dce2f1;
+    background: #fff;
+}
+
+.post-attachment-media {
+    max-height: 520px;
+}
+
+.post-attachment-doc {
+    min-height: 420px;
+}
+
+.post-attachment-audio {
+    width: 100%;
+}
+
 .post-actions {
     display: flex;
     flex-wrap: wrap;

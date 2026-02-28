@@ -60,11 +60,29 @@
                             <small>{{ post['igreja'] }} • {{ post['cidade'] }}/{{ post['pais'] }} • {{ post['criado_em'] }}</small>
                             <p>{{ post['conteudo'] }}</p>
                             {% if post['file_url'] %}
-                                <p>
-                                    <a href="{{ post['file_url'] }}" target="_blank" class="profile-link">
-                                        📎 {{ post['file_name'] or 'Abrir anexo' }}
-                                    </a>
-                                </p>
+                                {% set attachment_name = (post['file_name'] or '')|lower %}
+                                <div class="post-attachment">
+                                    {% if attachment_name.endswith('.jpg') or attachment_name.endswith('.jpeg') or attachment_name.endswith('.png') or attachment_name.endswith('.webp') or attachment_name.endswith('.gif') %}
+                                        <img src="{{ post['file_url'] }}" alt="Anexo da publicação" class="post-photo zoomable-image">
+                                    {% elif attachment_name.endswith('.mp4') or attachment_name.endswith('.webm') or attachment_name.endswith('.ogg') %}
+                                        <video controls class="post-attachment-media">
+                                            <source src="{{ post['file_url'] }}">
+                                            Seu navegador não suporta vídeo.
+                                        </video>
+                                    {% elif attachment_name.endswith('.mp3') or attachment_name.endswith('.wav') or attachment_name.endswith('.ogg') or attachment_name.endswith('.m4a') %}
+                                        <audio controls class="post-attachment-audio">
+                                            <source src="{{ post['file_url'] }}">
+                                            Seu navegador não suporta áudio.
+                                        </audio>
+                                    {% elif attachment_name.endswith('.pdf') %}
+                                        <iframe src="{{ post['file_url'] }}" class="post-attachment-doc" title="Prévia do anexo"></iframe>
+                                    {% endif %}
+                                    <p>
+                                        <a href="{{ post['file_url'] }}" target="_blank" class="profile-link">
+                                            📎 {{ post['file_name'] or 'Abrir anexo' }}
+                                        </a>
+                                    </p>
+                                </div>
                             {% endif %}
 
                             <div class="post-actions">
