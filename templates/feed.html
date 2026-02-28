@@ -214,6 +214,13 @@
                                 <strong>{{ backup['name'] }}</strong>
                                 <small>{{ backup['size_kb'] }} KB • {{ backup['modified'] }}</small>
                                 <a href="/admin/backups/{{ backup['name'] }}/download" class="profile-link">Baixar backup</a>
+                                {% if backup['can_delete'] %}
+                                    <form method="post" action="/admin/backups/{{ backup['name'] }}/delete" class="inline-mini" onsubmit="return confirm('Excluir este backup antigo?')">
+                                        <button type="submit" class="btn-danger">Excluir backup</button>
+                                    </form>
+                                {% else %}
+                                    <small>Mantenha este backup (mais recente).</small>
+                                {% endif %}
                             </div>
                         </div>
                     {% else %}

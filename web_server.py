@@ -667,6 +667,9 @@ def list_backups():
             }
         )
     backups.sort(key=lambda item: item["name"], reverse=True)
+    has_more_than_one = len(backups) > 1
+    for index, item in enumerate(backups):
+        item["can_delete"] = has_more_than_one and index > 0
     return backups
 
 
@@ -1800,6 +1803,55 @@ def download_backup(backup_name: str, request: Request):
         filename=safe_name,
         media_type="application/octet-stream",
     )
+
+
+@app.post("/admin/backups/{backup_name}/delete")
+def delete_backup(backup_name: str, request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/", status_code=302)
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    acting_user = cursor.fetchone()
+    conn.close()
+
+    if not is_admin(acting_user):
+        return RedirectResponse(url="/feed", status_code=302)
+
+    safe_name = os.path.basename(backup_name)
+    if safe_name != backup_name:
+        set_flash(request, "Arquivo de backup inválido.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    backups = list_backups()
+    if len(backups) < 2:
+        set_flash(request, "Crie um novo backup antes de excluir o atual.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    newest_name = backups[0]["name"]
+    if safe_name == newest_name:
+        set_flash(request, "Não é possível excluir o backup mais recente. Crie um novo e tente novamente.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    if safe_name not in {item["name"] for item in backups}:
+        set_flash(request, "Backup não encontrado.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    backup_path = os.path.abspath(os.path.join(BACKUP_DIR, safe_name))
+    backup_dir_abs = os.path.abspath(BACKUP_DIR)
+    if os.path.commonpath([backup_path, backup_dir_abs]) != backup_dir_abs or not os.path.exists(backup_path):
+        set_flash(request, "Backup não encontrado.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    try:
+        os.remove(backup_path)
+        set_flash(request, f"Backup removido: {safe_name}")
+    except OSError as err:
+        set_flash(request, f"Falha ao remover backup: {err}")
+
+    return RedirectResponse(url="/feed", status_code=302)
 
 
 @app.post("/connections/{target_user_id}/request")
