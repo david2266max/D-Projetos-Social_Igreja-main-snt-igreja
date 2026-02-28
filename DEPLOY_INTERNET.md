@@ -27,6 +27,10 @@ Este projeto já está preparado para deploy em nuvem.
 - O `render.yaml` já cria um disco (`/var/data`) para:
   - Banco SQLite: `/var/data/social_igreja_web.db`
   - Fotos: `/var/data/uploads`
+- Se o plano não permitir disco persistente, use **Postgres externo**:
+  - Configure `DATABASE_URL` nas variáveis de ambiente do Render.
+  - Com `DATABASE_URL`, o app usa Postgres automaticamente.
+  - Nesse modo, backup SQLite do painel fica desativado.
 
 ### 5) Verificação
 - Abra:

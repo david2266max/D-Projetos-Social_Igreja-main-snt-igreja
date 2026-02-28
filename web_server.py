@@ -8,6 +8,13 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
+try:
+    import psycopg  # type: ignore[import-not-found]
+    from psycopg.rows import dict_row  # type: ignore[import-not-found]
+except ImportError:
+    psycopg = None
+    dict_row = None
+
 from backup_sqlite import create_sqlite_backup, ensure_dir, prune_old_backups
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
@@ -18,6 +25,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RENDER_PERSISTENT_DIR = "/var/data"
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+USE_POSTGRES = bool(DATABASE_URL and psycopg)
 
 configured_data_dir = os.getenv("DATA_DIR")
 if configured_data_dir:
@@ -50,10 +59,117 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
 
 
+if USE_POSTGRES:
+    DBOperationalError = psycopg.OperationalError
+    DBIntegrityError = psycopg.IntegrityError
+    DBError = psycopg.Error
+else:
+    DBOperationalError = sqlite3.OperationalError
+    DBIntegrityError = sqlite3.IntegrityError
+    DBError = sqlite3.Error
+
+
+def _adapt_query(query: str) -> str:
+    if not USE_POSTGRES:
+        return query
+
+    adapted = query
+    adapted = adapted.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    if "INSERT OR IGNORE INTO" in adapted:
+        adapted = adapted.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+        adapted = adapted.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
+    adapted = adapted.replace("?", "%s")
+    return adapted
+
+
+class CursorProxy:
+    def __init__(self, inner):
+        self.inner = inner
+
+    def execute(self, query, params=None):
+        sql = _adapt_query(query)
+        if params is None:
+            return self.inner.execute(sql)
+        return self.inner.execute(sql, params)
+
+    def executemany(self, query, seq_of_params):
+        sql = _adapt_query(query)
+        return self.inner.executemany(sql, seq_of_params)
+
+    def fetchone(self):
+        return self.inner.fetchone()
+
+    def fetchall(self):
+        return self.inner.fetchall()
+
+    @property
+    def rowcount(self):
+        return self.inner.rowcount
+
+    @property
+    def lastrowid(self):
+        return getattr(self.inner, "lastrowid", None)
+
+
+class ConnectionProxy:
+    def __init__(self, inner):
+        self.inner = inner
+
+    def cursor(self):
+        return CursorProxy(self.inner.cursor())
+
+    def commit(self):
+        return self.inner.commit()
+
+    def close(self):
+        return self.inner.close()
+
+    def execute(self, query, params=None):
+        cursor = self.cursor()
+        cursor.execute(query, params)
+        return cursor
+
+
+def get_table_columns(cursor, table_name: str):
+    if USE_POSTGRES:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = ?
+            """,
+            (table_name,),
+        )
+        return [row["column_name"] for row in cursor.fetchall()]
+
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return [row[1] for row in cursor.fetchall()]
+
+
+def add_column_if_missing(cursor, table_name: str, column_name: str, definition: str):
+    columns = get_table_columns(cursor, table_name)
+    if column_name in columns:
+        return
+
+    if USE_POSTGRES:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} {definition}")
+        return
+
+    try:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+    except DBOperationalError:
+        columns = get_table_columns(cursor, table_name)
+        if column_name not in columns:
+            raise
+
+
 def get_conn():
+    if USE_POSTGRES:
+        return ConnectionProxy(psycopg.connect(DATABASE_URL, row_factory=dict_row))
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    return ConnectionProxy(conn)
 
 
 def init_db():
@@ -82,32 +198,9 @@ def init_db():
         """
     )
 
-    cursor.execute("PRAGMA table_info(users)")
-    user_columns = [row[1] for row in cursor.fetchall()]
-    if "role" not in user_columns:
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'membro'")
-        except sqlite3.OperationalError:
-            cursor.execute("PRAGMA table_info(users)")
-            user_columns = [row[1] for row in cursor.fetchall()]
-            if "role" not in user_columns:
-                raise
-    if "telefone" not in user_columns:
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN telefone TEXT NOT NULL DEFAULT ''")
-        except sqlite3.OperationalError:
-            cursor.execute("PRAGMA table_info(users)")
-            user_columns = [row[1] for row in cursor.fetchall()]
-            if "telefone" not in user_columns:
-                raise
-    if "approved" not in user_columns:
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN approved INTEGER NOT NULL DEFAULT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("PRAGMA table_info(users)")
-            user_columns = [row[1] for row in cursor.fetchall()]
-            if "approved" not in user_columns:
-                raise
+    add_column_if_missing(cursor, "users", "role", "TEXT NOT NULL DEFAULT 'membro'")
+    add_column_if_missing(cursor, "users", "telefone", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(cursor, "users", "approved", "INTEGER NOT NULL DEFAULT 1")
 
     cursor.execute(
         """
@@ -408,11 +501,18 @@ def get_or_create_dm(cursor, user_a_id: int, user_b_id: int) -> int:
         return row["id"]
 
     now = datetime.now().isoformat(timespec="seconds")
-    cursor.execute(
-        "INSERT INTO conversations (type, name, created_by_user_id, criado_em) VALUES ('dm', NULL, ?, ?)",
-        (user_a_id, now),
-    )
-    conversation_id = cursor.lastrowid
+    if USE_POSTGRES:
+        cursor.execute(
+            "INSERT INTO conversations (type, name, created_by_user_id, criado_em) VALUES ('dm', NULL, ?, ?) RETURNING id",
+            (user_a_id, now),
+        )
+        conversation_id = cursor.fetchone()["id"]
+    else:
+        cursor.execute(
+            "INSERT INTO conversations (type, name, created_by_user_id, criado_em) VALUES ('dm', NULL, ?, ?)",
+            (user_a_id, now),
+        )
+        conversation_id = cursor.lastrowid
     cursor.execute(
         "INSERT INTO conversation_members (conversation_id, user_id, criado_em) VALUES (?, ?, ?)",
         (conversation_id, first_id, now),
@@ -481,7 +581,7 @@ def get_user_conversations(cursor, user_id: int):
             (user_id, user_id, user_id, user_id),
         )
         return cursor.fetchall()
-    except sqlite3.OperationalError as err:
+    except DBOperationalError as err:
         if "conversation_reads" not in str(err):
             raise
         cursor.execute(
@@ -579,7 +679,7 @@ def get_unread_chat_count(cursor, user_id: int) -> int:
             (user_id, user_id, user_id),
         )
         return cursor.fetchone()["total"]
-    except sqlite3.OperationalError as err:
+    except DBOperationalError as err:
         if "conversation_reads" in str(err):
             return 0
         raise
@@ -715,9 +815,10 @@ def healthcheck():
             "status": "ok",
             "db": "ok",
             "users": total_users,
-            "db_path": DB_PATH,
+            "db_backend": "postgres" if USE_POSTGRES else "sqlite",
+            "db_path": "external-postgres" if USE_POSTGRES else DB_PATH,
         }
-    except sqlite3.Error:
+    except DBError:
         return {"status": "degraded", "db": "error"}
 
 
@@ -830,7 +931,7 @@ async def register(
             ),
         )
         conn.commit()
-    except sqlite3.IntegrityError:
+    except DBIntegrityError:
         conn.close()
         return templates.TemplateResponse(
             "register.html",
@@ -1809,6 +1910,10 @@ def create_backup_now(request: Request):
     if not is_admin(acting_user):
         return RedirectResponse(url="/feed", status_code=302)
 
+    if USE_POSTGRES:
+        set_flash(request, "Backup SQLite indisponível com Postgres. Use backup do provedor do banco.")
+        return RedirectResponse(url="/feed", status_code=302)
+
     try:
         ensure_dir(BACKUP_DIR)
         backup_path = create_sqlite_backup(DB_PATH, BACKUP_DIR, "social_igreja_web")
@@ -1836,6 +1941,10 @@ def download_backup(backup_name: str, request: Request):
     conn.close()
 
     if not is_admin(acting_user):
+        return RedirectResponse(url="/feed", status_code=302)
+
+    if USE_POSTGRES:
+        set_flash(request, "Download de backup SQLite indisponível com Postgres.")
         return RedirectResponse(url="/feed", status_code=302)
 
     safe_name = os.path.basename(backup_name)
@@ -1870,6 +1979,10 @@ def delete_backup(backup_name: str, request: Request):
     conn.close()
 
     if not is_admin(acting_user):
+        return RedirectResponse(url="/feed", status_code=302)
+
+    if USE_POSTGRES:
+        set_flash(request, "Exclusão de backup SQLite indisponível com Postgres.")
         return RedirectResponse(url="/feed", status_code=302)
 
     safe_name = os.path.basename(backup_name)
@@ -2274,11 +2387,18 @@ def create_group_chat(
             return RedirectResponse(url="/chat", status_code=302)
 
     now = datetime.now().isoformat(timespec="seconds")
-    cursor.execute(
-        "INSERT INTO conversations (type, name, created_by_user_id, criado_em) VALUES ('group', ?, ?, ?)",
-        (group_name, user_id, now),
-    )
-    conversation_id = cursor.lastrowid
+    if USE_POSTGRES:
+        cursor.execute(
+            "INSERT INTO conversations (type, name, created_by_user_id, criado_em) VALUES ('group', ?, ?, ?) RETURNING id",
+            (group_name, user_id, now),
+        )
+        conversation_id = cursor.fetchone()["id"]
+    else:
+        cursor.execute(
+            "INSERT INTO conversations (type, name, created_by_user_id, criado_em) VALUES ('group', ?, ?, ?)",
+            (group_name, user_id, now),
+        )
+        conversation_id = cursor.lastrowid
 
     for participant_id in participants:
         cursor.execute(
