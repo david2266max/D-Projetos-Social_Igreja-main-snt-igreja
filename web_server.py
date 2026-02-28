@@ -689,9 +689,17 @@ def startup_event():
 def healthcheck():
     try:
         conn = get_conn()
-        conn.execute("SELECT 1")
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.execute("SELECT COUNT(*) AS total FROM users")
+        total_users = cursor.fetchone()["total"]
         conn.close()
-        return {"status": "ok", "db": "ok"}
+        return {
+            "status": "ok",
+            "db": "ok",
+            "users": total_users,
+            "db_path": DB_PATH,
+        }
     except sqlite3.Error:
         return {"status": "degraded", "db": "error"}
 
