@@ -22,7 +22,16 @@
                 <input type="email" name="email" required>
 
                 <label>Senha</label>
-                <input type="password" name="senha" minlength="8" required>
+                <div class="password-field">
+                    <input id="senha" type="password" name="senha" minlength="8" required>
+                    <button type="button" class="toggle-password" data-target="senha">👁️</button>
+                </div>
+
+                <label>Confirmar senha</label>
+                <div class="password-field">
+                    <input id="confirmar_senha" type="password" name="confirmar_senha" minlength="8" required>
+                    <button type="button" class="toggle-password" data-target="confirmar_senha">👁️</button>
+                </div>
 
                 <label>Igreja Sara Nossa Terra</label>
                 <input type="text" name="igreja" required>
@@ -79,6 +88,14 @@
             event.target.value = formatPhone(event.target.value);
         });
         input.value = formatPhone(input.value);
+    });
+
+    document.querySelectorAll('.toggle-password').forEach((button) => {
+        button.addEventListener('click', () => {
+            const input = document.getElementById(button.dataset.target);
+            if (!input) return;
+            input.type = input.type === 'password' ? 'text' : 'password';
+        });
     });
 </script>
 </html>

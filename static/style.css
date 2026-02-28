@@ -71,6 +71,25 @@ button {
     border: 1px solid #c9d0df;
 }
 
+.password-field {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.password-field input {
+    width: 100%;
+}
+
+.toggle-password {
+    padding: 10px 12px;
+    background: #eef3ff;
+    color: #174aa7;
+    border: 1px solid #bfd0f5;
+    border-radius: 8px;
+}
+
 button {
     background: #174aa7;
     color: #fff;

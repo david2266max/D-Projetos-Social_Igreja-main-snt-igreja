@@ -45,7 +45,10 @@
                 </select>
 
                 <label>Nova senha (opcional)</label>
-                <input type="password" name="nova_senha" minlength="8" placeholder="Mínimo 8 caracteres">
+                <div class="password-field">
+                    <input id="nova_senha" type="password" name="nova_senha" minlength="8" placeholder="Mínimo 8 caracteres">
+                    <button type="button" class="toggle-password" data-target="nova_senha">👁️</button>
+                </div>
 
                 <label>Nova foto (opcional)</label>
                 <input type="file" name="foto" accept=".jpg,.jpeg,.png,.webp">
@@ -97,6 +100,14 @@
             event.target.value = formatPhone(event.target.value);
         });
         input.value = formatPhone(input.value);
+    });
+
+    document.querySelectorAll('.toggle-password').forEach((button) => {
+        button.addEventListener('click', () => {
+            const input = document.getElementById(button.dataset.target);
+            if (!input) return;
+            input.type = input.type === 'password' ? 'text' : 'password';
+        });
     });
 </script>
 </html>

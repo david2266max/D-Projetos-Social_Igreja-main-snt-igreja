@@ -697,6 +697,7 @@ async def register(
     nome: str = Form(...),
     email: str = Form(...),
     senha: str = Form(...),
+    confirmar_senha: str = Form(...),
     igreja: str = Form(...),
     cidade: str = Form(...),
     pais: str = Form(...),
@@ -708,12 +709,22 @@ async def register(
     foto: UploadFile = File(...),
 ):
     senha = senha.strip()
+    confirmar_senha = confirmar_senha.strip()
     if len(senha) < 8:
         return templates.TemplateResponse(
             "register.html",
             {
                 "request": request,
                 "cadastro_msg": "A senha precisa ter pelo menos 8 caracteres.",
+            },
+        )
+
+    if senha != confirmar_senha:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "cadastro_msg": "Senha e confirmação de senha não conferem.",
             },
         )
 
