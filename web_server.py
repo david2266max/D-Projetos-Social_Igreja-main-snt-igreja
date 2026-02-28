@@ -25,7 +25,12 @@ from starlette.middleware.sessions import SessionMiddleware
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RENDER_PERSISTENT_DIR = "/var/data"
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+DATABASE_URL_RAW = os.getenv("DATABASE_URL", "").strip()
+DATABASE_URL_ERROR = ""
+DATABASE_URL = DATABASE_URL_RAW
+if DATABASE_URL and not DATABASE_URL.lower().startswith(("postgres://", "postgresql://")):
+    DATABASE_URL_ERROR = "DATABASE_URL inválida: use a URL real do Postgres (postgresql://... ou postgres://...)"
+    DATABASE_URL = ""
 USE_POSTGRES = bool(DATABASE_URL and psycopg)
 
 configured_data_dir = os.getenv("DATA_DIR")
@@ -817,7 +822,9 @@ def healthcheck():
             "users": total_users,
             "db_backend": "postgres" if USE_POSTGRES else "sqlite",
             "db_path": "external-postgres" if USE_POSTGRES else DB_PATH,
-            "database_url_configured": bool(DATABASE_URL),
+            "database_url_configured": bool(DATABASE_URL_RAW),
+            "database_url_valid": bool(DATABASE_URL),
+            "database_url_error": DATABASE_URL_ERROR,
             "postgres_driver_available": bool(psycopg),
         }
     except DBError:
