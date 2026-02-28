@@ -21,7 +21,7 @@
             <div class="feed-list">
                 {% for post in user_posts %}
                     <article class="post">
-                        <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar">
+                        <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar zoomable-image">
                         <div class="post-body">
                             <small>{{ post['criado_em'] }} • {{ post['likes_count'] }} curtidas</small>
                             <p>{{ post['conteudo'] }}</p>
@@ -36,7 +36,7 @@
         <aside class="card">
             <div class="section-label">Resumo do perfil</div>
             <div class="profile-box">
-                <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar profile-avatar">
+                <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar profile-avatar zoomable-image">
                 <div>
                     <strong>{{ user['nome'] }}</strong>
                     <small>{{ user['faixa_etaria'] }}</small>
@@ -58,5 +58,20 @@
             </div>
         </aside>
     </main>
+    <div id="imageModal" class="image-modal" onclick="this.classList.remove('open')">
+        <img id="imageModalSrc" src="" alt="Imagem ampliada">
+    </div>
 </body>
+<script>
+    (function () {
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('imageModalSrc');
+        document.querySelectorAll('.zoomable-image').forEach((img) => {
+            img.addEventListener('click', () => {
+                modalImg.src = img.src;
+                modal.classList.add('open');
+            });
+        });
+    })();
+</script>
 </html>

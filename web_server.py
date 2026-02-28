@@ -50,11 +50,13 @@ def init_db():
             igreja TEXT NOT NULL,
             cidade TEXT NOT NULL,
             pais TEXT NOT NULL,
+            telefone TEXT NOT NULL DEFAULT '',
             faixa_etaria TEXT NOT NULL,
             revisao_vidas INTEGER NOT NULL,
             batizado_aguas INTEGER NOT NULL,
             foto_url TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'membro',
+            approved INTEGER NOT NULL DEFAULT 1,
             criado_em TEXT NOT NULL
         )
         """
@@ -77,6 +79,14 @@ def init_db():
             cursor.execute("PRAGMA table_info(users)")
             user_columns = [row[1] for row in cursor.fetchall()]
             if "telefone" not in user_columns:
+                raise
+    if "approved" not in user_columns:
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN approved INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("PRAGMA table_info(users)")
+            user_columns = [row[1] for row in cursor.fetchall()]
+            if "approved" not in user_columns:
                 raise
 
     cursor.execute(
@@ -565,6 +575,58 @@ def resolve_photo_storage_path(foto_url: Optional[str]) -> Optional[str]:
     return os.path.abspath(os.path.join(UPLOAD_DIR, relative_part))
 
 
+def delete_user_account_data(cursor, target_user_id: int):
+    cursor.execute("SELECT foto_url FROM users WHERE id = ?", (target_user_id,))
+    user_row = cursor.fetchone()
+    profile_photo_url = user_row["foto_url"] if user_row else None
+
+    cursor.execute("SELECT id, image_url FROM photo_posts WHERE user_id = ?", (target_user_id,))
+    photo_posts = cursor.fetchall()
+    for post in photo_posts:
+        cursor.execute("DELETE FROM photo_post_comments WHERE photo_post_id = ?", (post["id"],))
+        cursor.execute("DELETE FROM photo_post_likes WHERE photo_post_id = ?", (post["id"],))
+
+    cursor.execute("DELETE FROM photo_post_comments WHERE user_id = ?", (target_user_id,))
+    cursor.execute("DELETE FROM photo_post_likes WHERE user_id = ?", (target_user_id,))
+    cursor.execute("DELETE FROM photo_posts WHERE user_id = ?", (target_user_id,))
+
+    cursor.execute("SELECT id FROM comments WHERE user_id = ?", (target_user_id,))
+    own_comments = [row["id"] for row in cursor.fetchall()]
+    for comment_id in own_comments:
+        cursor.execute("DELETE FROM reports WHERE target_type = 'comment' AND target_id = ?", (comment_id,))
+    cursor.execute("DELETE FROM comments WHERE user_id = ?", (target_user_id,))
+
+    cursor.execute("SELECT id FROM posts WHERE user_id = ?", (target_user_id,))
+    own_posts = [row["id"] for row in cursor.fetchall()]
+    for post_id in own_posts:
+        cursor.execute("DELETE FROM comments WHERE post_id = ?", (post_id,))
+        cursor.execute("DELETE FROM post_likes WHERE post_id = ?", (post_id,))
+        cursor.execute("DELETE FROM reports WHERE target_type = 'post' AND target_id = ?", (post_id,))
+    cursor.execute("DELETE FROM posts WHERE user_id = ?", (target_user_id,))
+
+    cursor.execute("DELETE FROM post_likes WHERE user_id = ?", (target_user_id,))
+    cursor.execute("DELETE FROM reports WHERE reporter_user_id = ?", (target_user_id,))
+    cursor.execute("DELETE FROM known_contacts WHERE user_id = ? OR known_user_id = ?", (target_user_id, target_user_id))
+    cursor.execute(
+        "DELETE FROM connection_requests WHERE requester_user_id = ? OR receiver_user_id = ?",
+        (target_user_id, target_user_id),
+    )
+    cursor.execute("DELETE FROM conversation_reads WHERE user_id = ?", (target_user_id,))
+    cursor.execute("DELETE FROM messages WHERE sender_user_id = ?", (target_user_id,))
+    cursor.execute("DELETE FROM conversation_members WHERE user_id = ?", (target_user_id,))
+    cursor.execute(
+        "DELETE FROM conversations WHERE id NOT IN (SELECT DISTINCT conversation_id FROM conversation_members)"
+    )
+    cursor.execute("DELETE FROM users WHERE id = ?", (target_user_id,))
+
+    file_urls = []
+    if profile_photo_url:
+        file_urls.append(profile_photo_url)
+    for post in photo_posts:
+        file_urls.append(post["image_url"])
+    return file_urls
+
+
 def set_flash(request: Request, message: str):
     request.session["flash_msg"] = message
 
@@ -640,6 +702,7 @@ async def register(
     pais: str = Form(...),
     telefone: str = Form(""),
     faixa_etaria: str = Form(...),
+    solicitar_permissao: str = Form("off"),
     revisao_vidas: str = Form("off"),
     batizado_aguas: str = Form("off"),
     foto: UploadFile = File(...),
@@ -663,6 +726,15 @@ async def register(
             },
         )
 
+    if solicitar_permissao != "on":
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "cadastro_msg": "Você precisa solicitar permissão para cadastro.",
+            },
+        )
+
     foto_url, foto_error = save_uploaded_photo(foto)
     if foto_error:
         return templates.TemplateResponse(
@@ -678,13 +750,14 @@ async def register(
     cursor.execute("SELECT COUNT(*) as total FROM users")
     total_users = cursor.fetchone()["total"]
     default_role = "admin" if total_users == 0 else "membro"
+    approved = 1 if total_users == 0 else 0
     try:
         cursor.execute(
             """
             INSERT INTO users (
                 nome, email, senha_hash, igreja, cidade, pais,
-                telefone, faixa_etaria, revisao_vidas, batizado_aguas, foto_url, role, criado_em
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                telefone, faixa_etaria, revisao_vidas, batizado_aguas, foto_url, role, approved, criado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 nome.strip(),
@@ -699,6 +772,7 @@ async def register(
                 1,
                 foto_url,
                 default_role,
+                approved,
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
@@ -714,7 +788,10 @@ async def register(
         )
 
     conn.close()
-    set_flash(request, "Cadastro realizado com sucesso. Agora faça login.")
+    if approved:
+        set_flash(request, "Cadastro realizado com sucesso. Agora faça login.")
+    else:
+        set_flash(request, "Solicitação enviada. Aguarde aprovação de um admin para entrar.")
     return RedirectResponse(url="/", status_code=302)
 
 
@@ -723,7 +800,7 @@ def login(request: Request, email: str = Form(...), senha: str = Form(...)):
     conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, senha_hash FROM users WHERE email = ?",
+        "SELECT id, senha_hash, approved FROM users WHERE email = ?",
         (email.strip().lower(),),
     )
     user = cursor.fetchone()
@@ -733,6 +810,13 @@ def login(request: Request, email: str = Form(...), senha: str = Form(...)):
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "E-mail ou senha inválidos.", "cadastro_msg": None},
+        )
+
+    if not user["approved"]:
+        conn.close()
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Cadastro pendente de aprovação do admin.", "cadastro_msg": None},
         )
 
     if not user["senha_hash"].startswith("pbkdf2_sha256$"):
@@ -813,14 +897,15 @@ def feed(request: Request):
             """
             SELECT id, nome, igreja, cidade, pais, telefone, faixa_etaria, foto_url, role
             FROM users
-            WHERE lower(nome) LIKE ? OR lower(igreja) LIKE ? OR lower(cidade) LIKE ? OR lower(pais) LIKE ?
+            WHERE approved = 1
+              AND (lower(nome) LIKE ? OR lower(igreja) LIKE ? OR lower(cidade) LIKE ? OR lower(pais) LIKE ?)
             ORDER BY nome
             """,
             (like, like, like, like),
         )
     else:
         cursor.execute(
-            "SELECT id, nome, igreja, cidade, pais, telefone, faixa_etaria, foto_url, role FROM users ORDER BY nome"
+            "SELECT id, nome, igreja, cidade, pais, telefone, faixa_etaria, foto_url, role FROM users WHERE approved = 1 ORDER BY nome"
         )
     members = []
     for row in cursor.fetchall():
@@ -859,6 +944,18 @@ def feed(request: Request):
     pending_sent_count = len(pending_sent_ids)
 
     unread_chat_count = get_unread_chat_count(cursor, user_id)
+
+    pending_registrations = []
+    if is_admin(current_user):
+        cursor.execute(
+            """
+            SELECT id, nome, email, igreja, cidade, pais, criado_em
+            FROM users
+            WHERE approved = 0
+            ORDER BY id DESC
+            """
+        )
+        pending_registrations = cursor.fetchall()
 
     cursor.execute(
         """
@@ -934,6 +1031,7 @@ def feed(request: Request):
             "pending_received": pending_received,
             "pending_received_count": pending_received_count,
             "unread_chat_count": unread_chat_count,
+            "pending_registrations": pending_registrations,
             "profile_stats": profile_stats,
             "community_stats": community_stats,
         },
@@ -1214,6 +1312,19 @@ def profile_edit_page(request: Request):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     current_user = cursor.fetchone()
+
+    admin_candidates = []
+    if current_user and current_user["role"] == "admin":
+        cursor.execute(
+            """
+            SELECT id, nome, email
+            FROM users
+            WHERE id != ? AND approved = 1
+            ORDER BY nome
+            """,
+            (user_id,),
+        )
+        admin_candidates = cursor.fetchall()
     conn.close()
 
     return templates.TemplateResponse(
@@ -1222,9 +1333,7 @@ def profile_edit_page(request: Request):
             "request": request,
             "user": current_user,
             "flash": pop_flash(request),
-            "photo_url": current_user["foto_url"] if current_user else None,
-            "photo_storage_path": resolve_photo_storage_path(current_user["foto_url"]) if current_user else None,
-            "upload_dir": os.path.abspath(UPLOAD_DIR),
+            "admin_candidates": admin_candidates,
         },
     )
 
@@ -1297,9 +1406,6 @@ def user_profile_page(target_user_id: int, request: Request):
             "posts_count": posts_count,
             "known_count": known_count,
             "likes_received": likes_received,
-            "photo_url": target_user["foto_url"] if target_user else None,
-            "photo_storage_path": resolve_photo_storage_path(target_user["foto_url"]) if target_user else None,
-            "upload_dir": os.path.abspath(UPLOAD_DIR),
         },
     )
 
@@ -1363,6 +1469,51 @@ async def update_profile(
     conn.close()
     set_flash(request, "Perfil atualizado com sucesso.")
     return RedirectResponse(url="/feed", status_code=302)
+
+
+@app.post("/profile/delete")
+def delete_profile(request: Request, replacement_admin_id: str = Form("")):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/", status_code=302)
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, role FROM users WHERE id = ?", (user_id,))
+    current_user = cursor.fetchone()
+    if not current_user:
+        conn.close()
+        request.session.clear()
+        return RedirectResponse(url="/", status_code=302)
+
+    if current_user["role"] == "admin":
+        replacement_admin_id = replacement_admin_id.strip()
+        if not replacement_admin_id.isdigit() or int(replacement_admin_id) == user_id:
+            conn.close()
+            set_flash(request, "Como admin, selecione outro usuário para assumir admin antes de excluir seu perfil.")
+            return RedirectResponse(url="/profile/edit", status_code=302)
+        new_admin_id = int(replacement_admin_id)
+        cursor.execute("SELECT id FROM users WHERE id = ? AND approved = 1", (new_admin_id,))
+        if not cursor.fetchone():
+            conn.close()
+            set_flash(request, "Usuário escolhido para admin não é válido.")
+            return RedirectResponse(url="/profile/edit", status_code=302)
+        cursor.execute("UPDATE users SET role = 'admin' WHERE id = ?", (new_admin_id,))
+
+    file_urls = delete_user_account_data(cursor, user_id)
+    conn.commit()
+    conn.close()
+
+    for file_url in file_urls:
+        file_path = resolve_photo_storage_path(file_url)
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+
+    request.session.clear()
+    return RedirectResponse(url="/", status_code=302)
 
 
 @app.post("/posts/{post_id}/report")
@@ -1497,6 +1648,57 @@ def update_user_role(target_user_id: int, request: Request, new_role: str = Form
     conn.commit()
     conn.close()
     set_flash(request, "Função do usuário atualizada.")
+    return RedirectResponse(url="/feed", status_code=302)
+
+
+@app.post("/admin/users/{target_user_id}/approve")
+def approve_user_registration(target_user_id: int, request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/", status_code=302)
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    acting_user = cursor.fetchone()
+    if not is_admin(acting_user):
+        conn.close()
+        return RedirectResponse(url="/feed", status_code=302)
+
+    cursor.execute("UPDATE users SET approved = 1 WHERE id = ?", (target_user_id,))
+    conn.commit()
+    conn.close()
+    set_flash(request, "Cadastro aprovado com sucesso.")
+    return RedirectResponse(url="/feed", status_code=302)
+
+
+@app.post("/admin/users/{target_user_id}/reject")
+def reject_user_registration(target_user_id: int, request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/", status_code=302)
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    acting_user = cursor.fetchone()
+    if not is_admin(acting_user):
+        conn.close()
+        return RedirectResponse(url="/feed", status_code=302)
+
+    file_urls = delete_user_account_data(cursor, target_user_id)
+    conn.commit()
+    conn.close()
+
+    for file_url in file_urls:
+        file_path = resolve_photo_storage_path(file_url)
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+
+    set_flash(request, "Solicitação de cadastro recusada e usuário removido.")
     return RedirectResponse(url="/feed", status_code=302)
 
 

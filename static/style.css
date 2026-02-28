@@ -306,6 +306,32 @@ button {
     border: 1px solid #d0d7ea;
 }
 
+.zoomable-image {
+    cursor: zoom-in;
+}
+
+.image-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.image-modal.open {
+    display: flex;
+}
+
+.image-modal img {
+    max-width: 92vw;
+    max-height: 92vh;
+    border-radius: 12px;
+    border: 2px solid #fff;
+}
+
 .alert {
     background: #e8f2ff;
     color: #134191;

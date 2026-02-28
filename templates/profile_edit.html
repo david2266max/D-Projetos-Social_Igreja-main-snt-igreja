@@ -22,13 +22,6 @@
                 <div class="alert">{{ flash }}</div>
             {% endif %}
 
-            <div class="section-label">Armazenamento da foto</div>
-            <div class="alert">
-                <div><strong>URL:</strong> {{ photo_url }}</div>
-                <div><strong>Arquivo:</strong> {{ photo_storage_path }}</div>
-                <div><strong>Pasta de uploads:</strong> {{ upload_dir }}</div>
-            </div>
-
             <form method="post" action="/profile" enctype="multipart/form-data" class="form">
                 <label>Nome</label>
                 <input type="text" name="nome" value="{{ user['nome'] }}" required>
@@ -61,6 +54,20 @@
                     <button type="submit">Salvar</button>
                     <a href="/feed" class="btn-cancel">Cancelar</a>
                 </div>
+            </form>
+
+            <div class="section-label">Excluir perfil</div>
+            <form method="post" action="/profile/delete" class="form" onsubmit="return confirm('Deseja excluir seu perfil? Esta ação é irreversível.');">
+                {% if user['role'] == 'admin' %}
+                    <label>Como admin, selecione outro usuário para assumir admin</label>
+                    <select name="replacement_admin_id" required>
+                        <option value="">Selecione um usuário</option>
+                        {% for candidate in admin_candidates %}
+                            <option value="{{ candidate['id'] }}">{{ candidate['nome'] }} ({{ candidate['email'] }})</option>
+                        {% endfor %}
+                    </select>
+                {% endif %}
+                <button type="submit" class="btn-danger">Excluir meu perfil</button>
             </form>
         </section>
     </main>

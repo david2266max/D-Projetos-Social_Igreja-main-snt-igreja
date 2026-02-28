@@ -48,7 +48,7 @@
             <div class="feed-list">
                 {% for post in posts %}
                     <article class="post">
-                        <img src="{{ post['foto_url'] }}" alt="Foto de {{ post['nome'] }}" class="avatar">
+                        <img src="{{ post['foto_url'] }}" alt="Foto de {{ post['nome'] }}" class="avatar zoomable-image">
                         <div class="post-body">
                             {% if post['user_id'] == user['id'] or post['user_id'] in known_ids %}
                                 <h3><a href="/users/{{ post['user_id'] }}" class="profile-link">{{ post['nome'] }}</a></h3>
@@ -103,7 +103,7 @@
         <aside class="card">
             <div class="section-label">Perfil do usuário</div>
             <div class="profile-box">
-                <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar profile-avatar">
+                <img src="{{ user['foto_url'] }}" alt="Foto de {{ user['nome'] }}" class="avatar profile-avatar zoomable-image">
                 <div>
                     <strong>{{ user['nome'] }}</strong>
                     <small>{{ user['faixa_etaria'] }} • {{ user['role']|upper }}</small>
@@ -136,7 +136,7 @@
             <div class="members">
                 {% for member in members %}
                     <div class="member">
-                        <img src="{{ member['foto_url'] }}" alt="Foto de {{ member['nome'] }}" class="avatar">
+                        <img src="{{ member['foto_url'] }}" alt="Foto de {{ member['nome'] }}" class="avatar zoomable-image">
                         <div>
                             <strong>{{ member['nome'] }}</strong>
                             <small>{{ member['faixa_etaria'] }} • {{ member['igreja'] }} • {{ member['role'] }}</small>
@@ -202,11 +202,36 @@
                 </div>
             {% endif %}
 
+            {% if is_admin %}
+                <div class="section-label">Aprovação de cadastros</div>
+                <div class="members">
+                    {% for pending in pending_registrations %}
+                        <div class="member">
+                            <div>
+                                <strong>{{ pending['nome'] }}</strong>
+                                <small>{{ pending['email'] }} • {{ pending['igreja'] }}</small>
+                                <small>{{ pending['cidade'] }}/{{ pending['pais'] }} • {{ pending['criado_em'] }}</small>
+                                <div class="post-actions">
+                                    <form method="post" action="/admin/users/{{ pending['id'] }}/approve">
+                                        <button type="submit" class="btn-light">Aprovar</button>
+                                    </form>
+                                    <form method="post" action="/admin/users/{{ pending['id'] }}/reject" onsubmit="return confirm('Recusar cadastro e remover usuário?')">
+                                        <button type="submit" class="btn-danger">Recusar</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p>Não há cadastros pendentes.</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
             <div class="section-label">Solicitações recebidas</div>
             <div class="members">
                 {% for req in pending_received %}
                     <div class="member">
-                        <img src="{{ req['foto_url'] }}" alt="Foto de {{ req['nome'] }}" class="avatar">
+                        <img src="{{ req['foto_url'] }}" alt="Foto de {{ req['nome'] }}" class="avatar zoomable-image">
                         <div>
                             <strong>{{ req['nome'] }}</strong>
                             <small>{{ req['igreja'] }}</small>
@@ -230,7 +255,7 @@
             <div class="members">
                 {% for known in known_contacts %}
                     <div class="member">
-                        <img src="{{ known['foto_url'] }}" alt="Foto de {{ known['nome'] }}" class="avatar">
+                        <img src="{{ known['foto_url'] }}" alt="Foto de {{ known['nome'] }}" class="avatar zoomable-image">
                         <div>
                             <strong>{{ known['nome'] }}</strong>
                             <small>{{ known['igreja'] }}</small>
@@ -256,5 +281,20 @@
             <a href="/photos" class="profile-link">Abrir galeria de fotos</a>
         </aside>
     </main>
+    <div id="imageModal" class="image-modal" onclick="this.classList.remove('open')">
+        <img id="imageModalSrc" src="" alt="Imagem ampliada">
+    </div>
 </body>
+<script>
+    (function () {
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('imageModalSrc');
+        document.querySelectorAll('.zoomable-image').forEach((img) => {
+            img.addEventListener('click', () => {
+                modalImg.src = img.src;
+                modal.classList.add('open');
+            });
+        });
+    })();
+</script>
 </html>
