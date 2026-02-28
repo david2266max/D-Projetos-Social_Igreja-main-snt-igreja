@@ -17,9 +17,24 @@ from starlette.middleware.sessions import SessionMiddleware
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.getenv("DATA_DIR", BASE_DIR)
+RENDER_PERSISTENT_DIR = "/var/data"
+
+configured_data_dir = os.getenv("DATA_DIR")
+if configured_data_dir:
+    DATA_DIR = configured_data_dir
+elif os.path.isdir(RENDER_PERSISTENT_DIR):
+    DATA_DIR = RENDER_PERSISTENT_DIR
+else:
+    DATA_DIR = BASE_DIR
+
 DB_PATH = os.getenv("DB_PATH", os.path.join(DATA_DIR, "social_igreja_web.db"))
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(DATA_DIR, "uploads"))
+
+if os.path.isdir(RENDER_PERSISTENT_DIR):
+    if DB_PATH.startswith("/app/data/"):
+        DB_PATH = DB_PATH.replace("/app/data/", f"{RENDER_PERSISTENT_DIR}/", 1)
+    if UPLOAD_DIR.startswith("/app/data/"):
+        UPLOAD_DIR = UPLOAD_DIR.replace("/app/data/", f"{RENDER_PERSISTENT_DIR}/", 1)
 CHAT_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "chat")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -27,6 +42,8 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "social-igreja-chave-local")
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "5"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 BACKUP_DIR = os.getenv("BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
+if os.path.isdir(RENDER_PERSISTENT_DIR) and BACKUP_DIR.startswith("/app/data/"):
+    BACKUP_DIR = BACKUP_DIR.replace("/app/data/", f"{RENDER_PERSISTENT_DIR}/", 1)
 BACKUP_KEEP = int(os.getenv("BACKUP_KEEP", "15"))
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
