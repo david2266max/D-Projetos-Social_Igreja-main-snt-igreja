@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 from backup_sqlite import create_sqlite_backup, ensure_dir, prune_old_backups
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -649,6 +649,27 @@ def is_admin(user_row):
     return user_row and user_row["role"] == "admin"
 
 
+def list_backups():
+    ensure_dir(BACKUP_DIR)
+    backups = []
+    for name in os.listdir(BACKUP_DIR):
+        if not name.startswith("social_igreja_web_") or not name.endswith(".db"):
+            continue
+        file_path = os.path.join(BACKUP_DIR, name)
+        if not os.path.isfile(file_path):
+            continue
+        stats = os.stat(file_path)
+        backups.append(
+            {
+                "name": name,
+                "size_kb": max(1, int(stats.st_size / 1024)),
+                "modified": datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    backups.sort(key=lambda item: item["name"], reverse=True)
+    return backups
+
+
 app = FastAPI(title="Rede Social Sara Nossa Terra")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
@@ -950,6 +971,7 @@ def feed(request: Request):
     unread_chat_count = get_unread_chat_count(cursor, user_id)
 
     pending_registrations = []
+    backup_files = []
     if is_admin(current_user):
         cursor.execute(
             """
@@ -960,6 +982,7 @@ def feed(request: Request):
             """
         )
         pending_registrations = cursor.fetchall()
+        backup_files = list_backups()
 
     cursor.execute(
         """
@@ -1036,6 +1059,7 @@ def feed(request: Request):
             "pending_received_count": pending_received_count,
             "unread_chat_count": unread_chat_count,
             "pending_registrations": pending_registrations,
+            "backup_files": backup_files,
             "profile_stats": profile_stats,
             "community_stats": community_stats,
         },
@@ -1733,7 +1757,7 @@ def create_backup_now(request: Request):
     try:
         ensure_dir(BACKUP_DIR)
         backup_path = create_sqlite_backup(DB_PATH, BACKUP_DIR, "social_igreja_web")
-        removed = prune_old_backups(BACKUP_DIR, "social_igreja_web", BACKUP_KEEP)
+        removed = prune_old_backups(BACKUP_DIR, "social_igreja_web", max(1, BACKUP_KEEP))
         set_flash(
             request,
             f"Backup criado: {os.path.basename(backup_path)}. Removidos {len(removed)} arquivo(s) antigos.",
@@ -1742,6 +1766,40 @@ def create_backup_now(request: Request):
         set_flash(request, f"Falha ao criar backup: {err}")
 
     return RedirectResponse(url="/feed", status_code=302)
+
+
+@app.get("/admin/backups/{backup_name}/download")
+def download_backup(backup_name: str, request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/", status_code=302)
+
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    acting_user = cursor.fetchone()
+    conn.close()
+
+    if not is_admin(acting_user):
+        return RedirectResponse(url="/feed", status_code=302)
+
+    safe_name = os.path.basename(backup_name)
+    if safe_name != backup_name:
+        set_flash(request, "Arquivo de backup inválido.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    ensure_dir(BACKUP_DIR)
+    backup_path = os.path.abspath(os.path.join(BACKUP_DIR, safe_name))
+    backup_dir_abs = os.path.abspath(BACKUP_DIR)
+    if os.path.commonpath([backup_path, backup_dir_abs]) != backup_dir_abs or not os.path.exists(backup_path):
+        set_flash(request, "Backup não encontrado.")
+        return RedirectResponse(url="/feed", status_code=302)
+
+    return FileResponse(
+        path=backup_path,
+        filename=safe_name,
+        media_type="application/octet-stream",
+    )
 
 
 @app.post("/connections/{target_user_id}/request")

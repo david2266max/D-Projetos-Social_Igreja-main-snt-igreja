@@ -207,6 +207,19 @@
                 <form method="post" action="/admin/backups/create" class="inline-mini">
                     <button type="submit" class="btn-light">Criar backup SQLite agora</button>
                 </form>
+                <div class="members">
+                    {% for backup in backup_files %}
+                        <div class="member">
+                            <div>
+                                <strong>{{ backup['name'] }}</strong>
+                                <small>{{ backup['size_kb'] }} KB • {{ backup['modified'] }}</small>
+                                <a href="/admin/backups/{{ backup['name'] }}/download" class="profile-link">Baixar backup</a>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p>Ainda não há backups disponíveis.</p>
+                    {% endfor %}
+                </div>
 
                 <div class="section-label">Aprovação de cadastros</div>
                 <div class="members">
